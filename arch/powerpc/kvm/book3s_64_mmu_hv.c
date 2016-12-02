@@ -425,6 +425,11 @@ int kvmppc_hv_emulate_mmio(struct kvm_run *run, struct kvm_vcpu *vcpu,
 {
 	u32 last_inst;
 
+	if (!kvm_io_bus_write(vcpu, KVM_FAST_MMIO_BUS, gpa, 0, NULL)) {
+		kvmppc_set_pc(vcpu, kvmppc_get_pc(vcpu) + 4);
+		return RESUME_GUEST_NV;
+	}
+
 	/*
 	 * If we fail, we just return to the guest and try executing it again.
 	 */
