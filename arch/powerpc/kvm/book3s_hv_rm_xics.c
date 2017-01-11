@@ -154,7 +154,7 @@ static void icp_rm_set_vcpu_irq(struct kvm_vcpu *vcpu,
 	if (cpu < 0 || cpu >= nr_cpu_ids) {
 		hcore = -1;
 		if (kvmppc_host_rm_ops_hv && h_ipi_redirect)
-			hcore = find_available_hostcore(XICS_RM_KICK_VCPU);
+			hcore = find_available_hostcore(HOST_RM_KICK_VCPU);
 		if (hcore != -1) {
 			icp_send_hcore_msg(hcore, vcpu);
 		} else {
@@ -894,7 +894,7 @@ long kvmppc_deliver_irq_passthru(struct kvm_vcpu *vcpu,
 static void rm_host_ipi_action(int action, void *data)
 {
 	switch (action) {
-	case XICS_RM_KICK_VCPU:
+	case HOST_RM_KICK_VCPU:
 		kvmppc_host_rm_ops_hv->vcpu_kick(data);
 		break;
 	default:

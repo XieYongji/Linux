@@ -564,6 +564,7 @@ int kvmppc_rm_h_eoi(struct kvm_vcpu *vcpu, unsigned long xirr);
  * mode in the guest operating on the xics.
  * Currently only VCPU wakeup is supported.
  */
+#define HOST_RM_KICK_VCPU	1
 
 union kvmppc_rm_state {
 	unsigned long raw;
