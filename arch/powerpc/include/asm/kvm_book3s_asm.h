@@ -22,6 +22,7 @@
 
 /* XICS ICP register offsets */
 #define XICS_XIRR		4
+#define XICS_XIRR_POLL		0
 #define XICS_MFRR		0xc
 #define XICS_IPI		2	/* interrupt source # for IPIs */
 
