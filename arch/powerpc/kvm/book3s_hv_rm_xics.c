@@ -897,6 +897,9 @@ static void rm_host_ipi_action(int action, void *data)
 	case HOST_RM_KICK_VCPU:
 		kvmppc_host_rm_ops_hv->vcpu_kick(data);
 		break;
+	case HOST_RM_FAST_MMIO:
+		kvmppc_host_rm_ops_hv->handle_fast_mmio(data);
+		break;
 	default:
 		WARN(1, "Unexpected rm_action=%d data=%p\n", action, data);
 		break;

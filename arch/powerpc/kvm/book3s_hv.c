@@ -192,6 +192,32 @@ static void kvmppc_fast_vcpu_kick_hv(struct kvm_vcpu *vcpu)
 		smp_send_reschedule(cpu);
 }
 
+static void kvmppc_handle_fast_mmio(struct kvm_vcpu *vcpu)
+{
+	int state;
+	unsigned long gpa = vcpu->arch.fast_mmio_gpa;
+
+	state = cmpxchg(&vcpu->arch.fast_mmio_state,
+			KVMPPC_FAST_MMIO_IPI, KVMPPC_FAST_MMIO_DOING);
+
+	/*
+	 * We got here too late, the fast mmio has been handled.
+	 * So let's drop it.
+	 */
+	if (state != KVMPPC_FAST_MMIO_IPI)
+		goto timeout;
+
+	if (!kvm_io_bus_write(vcpu, KVM_FAST_MMIO_BUS, gpa, 0, NULL))
+		cmpxchg(&vcpu->arch.fast_mmio_state, KVMPPC_FAST_MMIO_DOING,
+			KVMPPC_FAST_MMIO_DONE);
+	else
+		cmpxchg(&vcpu->arch.fast_mmio_state, KVMPPC_FAST_MMIO_DOING,
+			KVMPPC_FAST_MMIO_FAILED);
+timeout:
+	if (vcpu->arch.fast_mmio_state == KVMPPC_FAST_MMIO_DROP)
+		vcpu->arch.fast_mmio_state = KVMPPC_FAST_MMIO_READY;
+}
+
 /*
  * We use the vcpu_load/put functions to measure stolen time.
  * Stolen time is counted as time when either the vcpu is able to
@@ -3318,6 +3344,7 @@ void kvmppc_alloc_host_rm_ops(void)
 	}
 
 	ops->vcpu_kick = kvmppc_fast_vcpu_kick_hv;
+	ops->handle_fast_mmio = kvmppc_handle_fast_mmio;
 
 	/*
 	 * Make the contents of the kvmppc_host_rm_ops structure visible

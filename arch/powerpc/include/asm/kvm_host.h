@@ -699,6 +699,9 @@ struct kvm_vcpu_arch {
 	unsigned long pgfault_hpte[2];
 	struct mmio_hpte_cache_entry *pgfault_cache;
 
+	unsigned long fast_mmio_gpa;
+	int fast_mmio_state;
+
 	struct task_struct *run_task;
 	struct kvm_run *kvm_run;
 
@@ -737,6 +740,14 @@ struct kvm_vcpu_arch {
 #define KVMPPC_VCPU_NOTREADY		0
 #define KVMPPC_VCPU_RUNNABLE		1
 #define KVMPPC_VCPU_BUSY_IN_HOST	2
+
+/* Values for vcpu->arch.fast_mmio_state */
+#define KVMPPC_FAST_MMIO_READY	0	/* We can handle fast mmio now */
+#define KVMPPC_FAST_MMIO_IPI	1	/* We're sending IPI to host core */
+#define KVMPPC_FAST_MMIO_DOING	2	/* Host core is handling fast mmio */
+#define KVMPPC_FAST_MMIO_DROP	3	/* Drop fast mmio because of time-out */
+#define KVMPPC_FAST_MMIO_DONE	4	/* Fast mmio is done */
+#define KVMPPC_FAST_MMIO_FAILED	5	/* Fast mmio is failed */
 
 /* Values for vcpu->arch.io_gpr */
 #define KVM_MMIO_REG_MASK	0x001f

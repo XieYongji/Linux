@@ -561,10 +561,11 @@ int kvmppc_rm_h_eoi(struct kvm_vcpu *vcpu, unsigned long xirr);
 
 /*
  * Host-side operations we want to set up while running in real
- * mode in the guest operating on the xics.
- * Currently only VCPU wakeup is supported.
+ * mode in the guest.
+ * Currently we support two operations: VCPU wakeup and fast mmio handling.
  */
 #define HOST_RM_KICK_VCPU	1
+#define HOST_RM_FAST_MMIO	2
 
 union kvmppc_rm_state {
 	unsigned long raw;
@@ -584,6 +585,7 @@ struct kvmppc_host_rm_ops {
 	struct kvmppc_host_rm_core	*rm_core;
 	int	start_core;
 	void		(*vcpu_kick)(struct kvm_vcpu *vcpu);
+	void		(*handle_fast_mmio)(struct kvm_vcpu *vcpu);
 };
 
 extern struct kvmppc_host_rm_ops *kvmppc_host_rm_ops_hv;
