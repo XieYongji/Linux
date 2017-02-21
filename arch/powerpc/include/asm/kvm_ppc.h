@@ -581,6 +581,7 @@ struct kvmppc_host_rm_core {
 
 struct kvmppc_host_rm_ops {
 	struct kvmppc_host_rm_core	*rm_core;
+	int	start_core;
 	void		(*vcpu_kick)(struct kvm_vcpu *vcpu);
 };
 

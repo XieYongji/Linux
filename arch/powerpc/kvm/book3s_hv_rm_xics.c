@@ -71,13 +71,10 @@ static inline void icp_send_hcore_msg(int hcore, struct kvm_vcpu *vcpu) { }
 #endif
 
 /*
- * We start the search from our current CPU Id in the core map
- * and go in a circle until we get back to our ID looking for a
+ * We start the search from the specified CPU Id in the core map
+ * and go in a circle until we get back to this ID looking for a
  * core that is running in host context and that hasn't already
  * been targeted for another rm_host_ops.
- *
- * In the future, could consider using a fairer algorithm (one
- * that distributes the IPIs better)
  *
  * Returns -1, if no CPU could be found in the host
  * Else, returns a CPU Id which has been reserved for use
@@ -118,12 +115,15 @@ static inline int grab_next_hostcore(int start,
 static inline int find_available_hostcore(int action)
 {
 	int core;
-	int my_core = smp_processor_id() >> threads_shift;
+	int start_core = kvmppc_host_rm_ops_hv->start_core;
 	struct kvmppc_host_rm_core *rm_core = kvmppc_host_rm_ops_hv->rm_core;
 
-	core = grab_next_hostcore(my_core, rm_core, cpu_nr_cores(), action);
+	core = grab_next_hostcore(start_core, rm_core, cpu_nr_cores(), action);
 	if (core == -1)
-		core = grab_next_hostcore(core, rm_core, my_core, action);
+		core = grab_next_hostcore(core, rm_core, start_core, action);
+
+	if (core != -1)
+		kvmppc_host_rm_ops_hv->start_core = core;
 
 	return core;
 }
