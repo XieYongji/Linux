@@ -587,6 +587,9 @@ struct kvmppc_host_rm_ops {
 
 extern struct kvmppc_host_rm_ops *kvmppc_host_rm_ops_hv;
 
+extern void icp_send_hcore_msg(int hcore, struct kvm_vcpu *vcpu);
+extern int find_available_hostcore(int action);
+
 static inline unsigned long kvmppc_get_epr(struct kvm_vcpu *vcpu)
 {
 #ifdef CONFIG_KVM_BOOKE_HV

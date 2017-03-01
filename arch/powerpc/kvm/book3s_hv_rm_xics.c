@@ -55,7 +55,7 @@ static void ics_rm_check_resend(struct kvmppc_xics *xics,
 /* -- ICP routines -- */
 
 #ifdef CONFIG_SMP
-static inline void icp_send_hcore_msg(int hcore, struct kvm_vcpu *vcpu)
+void icp_send_hcore_msg(int hcore, struct kvm_vcpu *vcpu)
 {
 	int hcpu;
 
@@ -67,7 +67,7 @@ static inline void icp_send_hcore_msg(int hcore, struct kvm_vcpu *vcpu)
 	kvmhv_rm_send_ipi(hcpu);
 }
 #else
-static inline void icp_send_hcore_msg(int hcore, struct kvm_vcpu *vcpu) { }
+void icp_send_hcore_msg(int hcore, struct kvm_vcpu *vcpu) { }
 #endif
 
 /*
@@ -112,7 +112,7 @@ static inline int grab_next_hostcore(int start,
 	return -1;
 }
 
-static inline int find_available_hostcore(int action)
+int find_available_hostcore(int action)
 {
 	int core;
 	int start_core = kvmppc_host_rm_ops_hv->start_core;
