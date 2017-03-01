@@ -470,6 +470,34 @@ int kvmppc_hv_emulate_mmio(struct kvm_run *run, struct kvm_vcpu *vcpu,
 	return kvmppc_emulate_mmio(run, vcpu);
 }
 
+static int kvmppc_wait_for_fast_mmio(struct kvm_vcpu *vcpu)
+{
+	int state;
+	u64 stop;
+
+	/*
+	 * If the IPI is not delivered yet, we handle this mmio access by
+	 * ourselves and let IPI handler drop it when the IPI comes in.
+	 */
+	cmpxchg(&vcpu->arch.fast_mmio_state, KVMPPC_FAST_MMIO_IPI,
+		KVMPPC_FAST_MMIO_DROP);
+
+	stop = get_tb() + 100 * tb_ticks_per_usec;
+	while (get_tb() < stop) {
+		state = READ_ONCE(vcpu->arch.fast_mmio_state);
+		if (state != KVMPPC_FAST_MMIO_DOING)
+			return state;
+	}
+	state = cmpxchg(&vcpu->arch.fast_mmio_state, KVMPPC_FAST_MMIO_DOING,
+						KVMPPC_FAST_MMIO_DROP);
+
+	if (state == KVMPPC_FAST_MMIO_DOING)
+		pr_err("KVM: fast mmio time out at gpa: %lu\n",
+						vcpu->arch.fast_mmio_gpa);
+
+	return state;
+}
+
 int kvmppc_book3s_hv_page_fault(struct kvm_run *run, struct kvm_vcpu *vcpu,
 				unsigned long ea, unsigned long dsisr)
 {
@@ -490,6 +518,17 @@ int kvmppc_book3s_hv_page_fault(struct kvm_run *run, struct kvm_vcpu *vcpu,
 	struct vm_area_struct *vma;
 	unsigned long rcbits;
 	long mmio_update;
+	int state;
+
+	/* If host core is handling fast mmio access, wait for it */
+	state = kvmppc_wait_for_fast_mmio(vcpu);
+
+	if (state == KVMPPC_FAST_MMIO_DONE) {
+		vcpu->arch.fast_mmio_state = KVMPPC_FAST_MMIO_READY;
+		kvmppc_set_pc(vcpu, kvmppc_get_pc(vcpu) + 4);
+		return RESUME_GUEST_NV;
+	} else if (state == KVMPPC_FAST_MMIO_FAILED)
+		vcpu->arch.fast_mmio_state = KVMPPC_FAST_MMIO_READY;
 
 	if (kvm_is_radix(kvm))
 		return kvmppc_book3s_radix_page_fault(run, vcpu, ea, dsisr);

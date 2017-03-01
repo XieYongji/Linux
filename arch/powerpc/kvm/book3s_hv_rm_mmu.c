@@ -21,6 +21,9 @@
 #include <asm/hvcall.h>
 #include <asm/synch.h>
 #include <asm/ppc-opcode.h>
+#include <asm/opal.h>
+
+#include "book3s_xics.h"
 
 /* Translate address of a vmalloc'd thing to a linear map address */
 static void *real_vmalloc_addr(void *x)
@@ -1023,6 +1026,90 @@ long kvmppc_hv_find_lock_hpte(struct kvm *kvm, gva_t eaddr, unsigned long slb_v,
 }
 EXPORT_SYMBOL(kvmppc_hv_find_lock_hpte);
 
+static int kvmppc_thread_need_exit(void)
+{
+	struct kvmppc_vcore *vc = local_paca->kvm_hstate.kvm_vcore;
+	unsigned long xics_phys;
+	__be32 xirr;
+	int64_t rc;
+
+	if (VCORE_IS_EXITING(vc))
+		return 1;
+
+	/*
+	 * Only primary thread is needed to test HDEC, HMI and
+	 * external interrupt
+	 */
+	if (local_paca->kvm_hstate.ptid)
+		return 0;
+
+	xics_phys = local_paca->kvm_hstate.xics_phys;
+	if (!xics_phys) {
+		/* Use OPAL to read the XIRR */
+		rc = opal_rm_int_get_xirr(&xirr, true);
+		if (rc < 0)
+			return 1;
+	} else {
+		xirr = _lwzcix(xics_phys + XICS_XIRR_POLL);
+	}
+
+	/* If any external interrupt is pending */
+	if (be32_to_cpu(xirr) & 0xffffff)
+		return 1;
+
+	/* If any HDEC interrupt is pending */
+	if (((long)mfspr(SPRN_HDEC)) <= 0)
+		return 1;
+
+	/* If any HMI interrupt is pending */
+	if (mfspr(SPRN_HMER) & mfspr(SPRN_HMEER))
+		return 1;
+
+	return 0;
+}
+
+static int kvmppc_handle_fast_mmio(struct kvm_vcpu *vcpu, unsigned long hpte_v,
+				   unsigned long rpte, unsigned long eaddr)
+{
+	unsigned long psize, gpa_base, gpa;
+	u64 stop;
+	int state;
+	int hcore = -1;
+
+	if (vcpu->arch.fast_mmio_state != KVMPPC_FAST_MMIO_READY)
+		return 1;
+
+	if (kvmppc_host_rm_ops_hv)
+		hcore = find_available_hostcore(HOST_RM_FAST_MMIO);
+
+	if (hcore == -1)
+		return 1;
+
+	psize = hpte_page_size(hpte_v, rpte);
+	gpa_base = rpte & HPTE_R_RPN & ~(psize - 1);
+	gpa = gpa_base | (eaddr & (psize - 1));
+
+	vcpu->arch.fast_mmio_gpa = gpa;
+	vcpu->arch.fast_mmio_state = KVMPPC_FAST_MMIO_IPI;
+	/* Order fast_mmio_gpa and fast_mmio_state vs. IPI handler */
+	smp_mb();
+	icp_send_hcore_msg(hcore, vcpu);
+	stop = get_tb() + 5 * tb_ticks_per_usec;
+
+	/* Wait for host core to finish handling the mmio access */
+	while ((get_tb() < stop) && !kvmppc_thread_need_exit()) {
+		state = READ_ONCE(vcpu->arch.fast_mmio_state);
+		if (state == KVMPPC_FAST_MMIO_DONE) {
+			vcpu->arch.fast_mmio_state = KVMPPC_FAST_MMIO_READY;
+			return 0;
+		} else if (state == KVMPPC_FAST_MMIO_FAILED) {
+			return 1;
+		}
+	}
+
+	return 1;
+}
+
 /*
  * Called in real mode to check whether an HPTE not found fault
  * is due to accessing a paged-out page or an emulated MMIO page,
@@ -1108,6 +1195,14 @@ long kvmppc_hpte_hv_fault(struct kvm_vcpu *vcpu, unsigned long addr,
 			perm >>= 1;
 		if (perm & 1)
 			return status | DSISR_KEYFAULT;
+	}
+
+	if ((r & (HPTE_R_KEY_HI | HPTE_R_KEY_LO)) ==
+	    (HPTE_R_KEY_HI | HPTE_R_KEY_LO) && (status & DSISR_ISSTORE)) {
+		if (!kvmppc_handle_fast_mmio(vcpu, v, gr, addr)) {
+			kvmppc_set_pc(vcpu, kvmppc_get_pc(vcpu) + 4);
+			return 0;
+		}
 	}
 
 	/* Save HPTE info for virtual-mode handler */

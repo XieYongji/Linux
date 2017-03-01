@@ -1040,7 +1040,12 @@ static int kvmppc_handle_exit_hv(struct kvm_run *run, struct kvm_vcpu *vcpu,
 	 * have been handled already.
 	 */
 	case BOOK3S_INTERRUPT_H_DATA_STORAGE:
-		r = RESUME_PAGE_FAULT;
+		if (vcpu->arch.fast_mmio_state == KVMPPC_FAST_MMIO_DONE) {
+			kvmppc_set_pc(vcpu, kvmppc_get_pc(vcpu) + 4);
+			vcpu->arch.fast_mmio_state = KVMPPC_FAST_MMIO_READY;
+			r = RESUME_GUEST_NV;
+		} else
+			r = RESUME_PAGE_FAULT;
 		break;
 	case BOOK3S_INTERRUPT_H_INST_STORAGE:
 		vcpu->arch.fault_dar = kvmppc_get_pc(vcpu);
